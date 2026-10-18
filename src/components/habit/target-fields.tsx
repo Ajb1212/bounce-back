@@ -15,21 +15,22 @@ interface TargetFieldsProps {
   type: GoalType;
   draft: TargetDraft;
   onChange: (draft: TargetDraft) => void;
-  /** The goal chooses the unit; the current state reuses it, so it can't change it. */
-  canChooseUnit: boolean;
+  /** The goal chooses the unit and interval; the current state reuses them. */
+  mode: "goal" | "current";
   unit: Unit;
 }
 
 /** The fields shared by the goal and the current state. Which ones show depends on the goal type. */
-export function TargetFields({ type, draft, onChange, canChooseUnit, unit }: TargetFieldsProps) {
+export function TargetFields({ type, draft, onChange, mode, unit }: TargetFieldsProps) {
+  const isGoal = mode === "goal";
   const showAmount = type === "count" || type === "stack";
-  const showInterval = type === "count" || type === "time";
+  const showInterval = isGoal && (type === "count" || type === "time");
 
   return (
     <>
       {showAmount ? (
         <Field label={unit === "minutes" ? "How long" : "How many times"}>
-          {canChooseUnit ? (
+          {isGoal ? (
             <ChipGroup
               options={UNIT_OPTIONS}
               value={unit}

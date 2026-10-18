@@ -12,7 +12,13 @@ import { HABIT_COLORS, HABIT_ICONS } from "@/constants/habit-options";
 import { colors, radius, spacing } from "@/constants/theme";
 import { useHabits } from "@/context/habits-context";
 import { describeCurrent, describeGoal } from "@/lib/format";
-import { buildCurrent, buildGoal, DEFAULT_PROGRESSION, DEFAULT_TARGET } from "@/lib/habit-draft";
+import {
+  buildCurrent,
+  buildGoal,
+  DEFAULT_PROGRESSION,
+  DEFAULT_TARGET,
+  progressionBounds,
+} from "@/lib/habit-draft";
 import type { GoalType, IconName } from "@/types/habit";
 
 export default function NewHabitScreen() {
@@ -33,8 +39,11 @@ export default function NewHabitScreen() {
 
   const unit = goalDraft.amount.unit;
   const goal = buildGoal(goalType, goalDraft, afterHabitId);
+  const bounds = progressionBounds(goalType, goalDraft, currentDraft, progressionDraft.timeDirection);
   const current =
-    goal && hasCurrent ? buildCurrent(goal, currentDraft, hasProgression ? progressionDraft : null) : undefined;
+    goal && hasCurrent
+      ? buildCurrent(goal, goalDraft, currentDraft, hasProgression ? progressionDraft : null)
+      : undefined;
   const canSave = title.trim() !== "" && goal !== null;
 
   function handleSave() {
@@ -95,10 +104,13 @@ export default function NewHabitScreen() {
           </Field>
         ) : null}
 
-        <TargetFields type={goalType} draft={goalDraft} onChange={setGoalDraft} canChooseUnit unit={unit} />
+        <TargetFields type={goalType} draft={goalDraft} onChange={setGoalDraft} mode="goal" unit={unit} />
       </Section>
 
-      <Section title="Current" subtitle="Optional. Where you are today, if you already do this.">
+      <Section
+        title="Current"
+        subtitle="Optional. Where you are today, if you already do this. Repeats on the same schedule as the goal."
+      >
         <ToggleRow label="I already do this" value={hasCurrent} onChange={setHasCurrent} />
         {hasCurrent ? (
           <>
@@ -106,22 +118,30 @@ export default function NewHabitScreen() {
               type={goalType}
               draft={currentDraft}
               onChange={setCurrentDraft}
-              canChooseUnit={false}
+              mode="current"
               unit={unit}
             />
-            <ToggleRow
-              label="Progress gradually toward the goal"
-              value={hasProgression}
-              onChange={setHasProgression}
-            />
-            {hasProgression ? (
-              <ProgressionFields
-                type={goalType}
-                unit={unit}
-                draft={progressionDraft}
-                onChange={setProgressionDraft}
-              />
-            ) : null}
+            {/* When current equals the goal there is nothing to progress. */}
+            {bounds.direction ? (
+              <>
+                <ToggleRow
+                  label="Progress gradually toward the goal"
+                  value={hasProgression}
+                  onChange={setHasProgression}
+                />
+                {hasProgression ? (
+                  <ProgressionFields
+                    type={goalType}
+                    unit={unit}
+                    bounds={bounds}
+                    draft={progressionDraft}
+                    onChange={setProgressionDraft}
+                  />
+                ) : null}
+              </>
+            ) : (
+              <Text style={styles.note}>You are already at the goal.</Text>
+            )}
           </>
         ) : null}
       </Section>
@@ -134,7 +154,7 @@ export default function NewHabitScreen() {
         {current ? (
           <Text style={styles.summary}>
             <Text style={styles.summaryLabel}>Current: </Text>
-            {describeCurrent(current)}
+            {goal ? describeCurrent(current, goal) : null}
           </Text>
         ) : null}
       </Section>

@@ -32,17 +32,21 @@ export type Goal =
 
 /**
  * A gradual change applied to the current state, e.g. +1 time every 14 days.
- * `change` is in the goal's unit, or in minutes for time goals. Negative means decrease.
+ * `change` is in the goal's unit, or in minutes for time goals (positive = later).
+ * Negative means decrease. It never moves past the goal: once reached, it stays there.
  */
 export interface Progression {
   change: number;
   interval: Interval;
 }
 
-/** Where the user is today. Always the same type as the goal. */
+/**
+ * Where the user is today. Always the same type and unit as the goal,
+ * and it repeats on the goal's interval, so only the amount or time differs.
+ */
 export type Current =
-  | { type: "count"; amount: Amount; interval: Interval; progression?: Progression }
-  | { type: "time"; time: TimeOfDay; interval: Interval; progression?: Progression }
+  | { type: "count"; amount: Amount; progression?: Progression }
+  | { type: "time"; time: TimeOfDay; progression?: Progression }
   | { type: "stack"; amount: Amount; progression?: Progression };
 
 export interface Habit {

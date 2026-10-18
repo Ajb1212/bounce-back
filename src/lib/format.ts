@@ -20,6 +20,12 @@ export function formatProgression({ change, interval }: Progression, unit: Unit)
   return `${sign}${formatAmount({ value: Math.abs(change), unit })} ${formatInterval(interval, "every")}`;
 }
 
+/** For time goals, e.g. "30 min earlier every 5 days". */
+export function formatTimeProgression({ change, interval }: Progression): string {
+  const direction = change >= 0 ? "later" : "earlier";
+  return `${formatAmount({ value: Math.abs(change), unit: "minutes" })} ${direction} ${formatInterval(interval, "every")}`;
+}
+
 export function describeGoal(goal: Goal, habits: Habit[]): string {
   switch (goal.type) {
     case "count":
@@ -33,25 +39,20 @@ export function describeGoal(goal: Goal, habits: Habit[]): string {
   }
 }
 
-export function describeCurrent(current: Current): string {
-  let text: string;
-  let progressionUnit: Unit;
+/** The current state repeats on the goal's interval, so the goal is needed to describe it. */
+export function describeCurrent(current: Current, goal: Goal): string {
+  const progression = current.progression;
   switch (current.type) {
+    case "time": {
+      let text = `at ${formatTime(current.time)}`;
+      if (goal.type === "time") text += ` ${formatInterval(goal.interval, "every")}`;
+      return progression ? `${text}, ${formatTimeProgression(progression)}` : text;
+    }
     case "count":
-      text = `${formatAmount(current.amount)} ${formatInterval(current.interval, "per")}`;
-      progressionUnit = current.amount.unit;
-      break;
-    case "time":
-      text = `at ${formatTime(current.time)} ${formatInterval(current.interval, "every")}`;
-      progressionUnit = "minutes";
-      break;
-    case "stack":
-      text = formatAmount(current.amount);
-      progressionUnit = current.amount.unit;
-      break;
+    case "stack": {
+      let text = formatAmount(current.amount);
+      if (goal.type === "count") text += ` ${formatInterval(goal.interval, "per")}`;
+      return progression ? `${text}, ${formatProgression(progression, current.amount.unit)}` : text;
+    }
   }
-  if (current.progression) {
-    text += `, ${formatProgression(current.progression, progressionUnit)}`;
-  }
-  return text;
 }
