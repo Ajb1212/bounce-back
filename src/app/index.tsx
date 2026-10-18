@@ -1,98 +1,98 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { Link } from "expo-router";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+import { colors, radius, spacing } from "@/constants/theme";
+import { useHabits } from "@/context/habits-context";
+import { describeGoal } from "@/lib/format";
 
 export default function HomeScreen() {
+  const { habits } = useHabits();
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      {habits.length === 0 ? (
+        <Text style={styles.empty}>No habits yet. Create your first one.</Text>
+      ) : (
+        habits.map((habit) => (
+          <View key={habit.id} style={styles.card}>
+            <View style={[styles.iconBubble, { backgroundColor: habit.color }]}>
+              <Ionicons name={habit.icon} size={22} color={colors.onPrimary} />
+            </View>
+            <View style={styles.cardText}>
+              <Text style={styles.cardTitle}>{habit.title}</Text>
+              <Text style={styles.cardSubtitle}>{describeGoal(habit.goal, habits)}</Text>
+            </View>
+          </View>
+        ))
+      )}
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      <Link href="/new-habit" asChild>
+        <Pressable style={styles.button} accessibilityRole="button">
+          <Ionicons name="add" size={22} color={colors.onPrimary} />
+          <Text style={styles.buttonText}>New habit</Text>
+        </Pressable>
+      </Link>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    backgroundColor: colors.background,
   },
-  safeArea: {
+  content: {
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  empty: {
+    marginVertical: spacing.xl,
+    fontSize: 15,
+    color: colors.muted,
+    textAlign: "center",
+  },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+  },
+  iconBubble: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardText: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text,
   },
-  title: {
-    textAlign: 'center',
+  cardSubtitle: {
+    marginTop: 2,
+    fontSize: 14,
+    color: colors.muted,
   },
-  code: {
-    textTransform: 'uppercase',
+  button: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    height: 50,
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  buttonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.onPrimary,
   },
 });
