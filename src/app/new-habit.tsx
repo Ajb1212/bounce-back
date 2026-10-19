@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import { ChipGroup } from "@/components/form/chip-group";
 import { ColorPicker } from "@/components/form/color-picker";
@@ -30,7 +30,7 @@ export default function NewHabitScreen() {
 
   const [goalType, setGoalType] = useState<GoalType>("count");
   const [goalDraft, setGoalDraft] = useState(DEFAULT_TARGET);
-  const [afterHabitId, setAfterHabitId] = useState<string | null>(null);
+  const [afterHabitId, setAfterHabitId] = useState<number | null>(null);
 
   const [hasCurrent, setHasCurrent] = useState(false);
   const [currentDraft, setCurrentDraft] = useState(DEFAULT_TARGET);
@@ -44,12 +44,20 @@ export default function NewHabitScreen() {
     goal && hasCurrent
       ? buildCurrent(goal, goalDraft, currentDraft, hasProgression ? progressionDraft : null)
       : undefined;
-  const canSave = title.trim() !== "" && goal !== null;
+  const [isSaving, setIsSaving] = useState(false);
+  const canSave = title.trim() !== "" && goal !== null && !isSaving;
 
-  function handleSave() {
+  async function handleSave() {
     if (!canSave || !goal) return;
-    addHabit({ title: title.trim(), color, icon, goal, current });
-    router.back();
+    setIsSaving(true);
+    try {
+      await addHabit({ title: title.trim(), color, icon, goal, current });
+      router.back();
+    } catch (error) {
+      console.error("Failed to save habit", error);
+      Alert.alert("Couldn't save the habit", "Please try again.");
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -165,7 +173,7 @@ export default function NewHabitScreen() {
         onPress={handleSave}
         accessibilityRole="button"
       >
-        <Text style={styles.saveButtonText}>Create habit</Text>
+        <Text style={styles.saveButtonText}>{isSaving ? "Saving…" : "Create habit"}</Text>
       </Pressable>
       {title.trim() === "" ? <Text style={styles.note}>Add a title to create the habit.</Text> : null}
     </ScrollView>

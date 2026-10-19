@@ -7,11 +7,11 @@ import { useHabits } from "@/context/habits-context";
 import { describeGoal } from "@/lib/format";
 
 export default function HomeScreen() {
-  const { habits } = useHabits();
+  const { habits, isLoading } = useHabits();
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      {habits.length === 0 ? (
+      {isLoading ? null : habits.length === 0 ? (
         <Text style={styles.empty}>No habits yet. Create your first one.</Text>
       ) : (
         habits.map((habit) => (

@@ -2,20 +2,20 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors, radius, spacing } from "@/constants/theme";
 
-export interface ChipOption<T extends string> {
+export interface ChipOption<T extends string | number> {
   value: T;
   label: string;
   disabled?: boolean;
 }
 
-interface ChipGroupProps<T extends string> {
+interface ChipGroupProps<T extends string | number> {
   options: ChipOption<T>[];
   value: T | null;
   onChange: (value: T) => void;
 }
 
 /** A row of pill buttons where exactly one can be selected. */
-export function ChipGroup<T extends string>({ options, value, onChange }: ChipGroupProps<T>) {
+export function ChipGroup<T extends string | number>({ options, value, onChange }: ChipGroupProps<T>) {
   return (
     <View style={styles.row}>
       {options.map((option) => {

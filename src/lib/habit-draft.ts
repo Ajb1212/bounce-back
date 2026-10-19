@@ -53,14 +53,14 @@ export function progressionBounds(
   };
 }
 
-export function buildGoal(type: GoalType, draft: TargetDraft, afterHabitId: string | null): Goal | null {
+export function buildGoal(type: GoalType, draft: TargetDraft, afterHabitId: number | null): Goal | null {
   switch (type) {
     case "count":
       return { type, amount: draft.amount, interval: draft.interval };
     case "time":
       return { type, time: draft.time, interval: draft.interval };
     case "stack":
-      if (!afterHabitId) return null;
+      if (afterHabitId === null) return null;
       return { type, afterHabitId, amount: draft.amount };
   }
 }

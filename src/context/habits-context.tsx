@@ -1,34 +1,52 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { useSQLiteContext } from "expo-sqlite";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
+import { getAllHabits, insertHabit } from "@/db/habits-repository";
 import type { Habit } from "@/types/habit";
 
 type NewHabit = Omit<Habit, "id" | "createdAt">;
 
 interface HabitsContextValue {
   habits: Habit[];
-  addHabit: (habit: NewHabit) => Habit;
+  isLoading: boolean;
+  addHabit: (habit: NewHabit) => Promise<Habit>;
 }
 
 const HabitsContext = createContext<HabitsContextValue | null>(null);
 
-function makeId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 /**
- * Holds the habit list in memory for now, so it resets when the app reloads.
- * Saving to the device comes in a later step.
+ * Loads the habits from SQLite once, then keeps them in memory for the screens.
+ * Every change is written to the database first, so the list survives app restarts.
  */
 export function HabitsProvider({ children }: { children: ReactNode }) {
+  const db = useSQLiteContext();
   const [habits, setHabits] = useState<Habit[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  function addHabit(input: NewHabit): Habit {
-    const habit: Habit = { ...input, id: makeId(), createdAt: new Date().toISOString() };
+  useEffect(() => {
+    let cancelled = false;
+    getAllHabits(db)
+      .then((loaded) => {
+        if (!cancelled) setHabits(loaded);
+      })
+      .catch((error) => console.error("Failed to load habits", error))
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [db]);
+
+  async function addHabit(input: NewHabit): Promise<Habit> {
+    const unsaved = { ...input, createdAt: new Date().toISOString() };
+    const id = await insertHabit(db, unsaved);
+    const habit: Habit = { ...unsaved, id };
     setHabits((prev) => [...prev, habit]);
     return habit;
   }
 
-  return <HabitsContext.Provider value={{ habits, addHabit }}>{children}</HabitsContext.Provider>;
+  return <HabitsContext.Provider value={{ habits, isLoading, addHabit }}>{children}</HabitsContext.Provider>;
 }
 
 export function useHabits(): HabitsContextValue {
