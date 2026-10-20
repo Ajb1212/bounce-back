@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import { ChipGroup } from "@/components/form/chip-group";
 import { ColorPicker } from "@/components/form/color-picker";
@@ -10,6 +10,7 @@ import { TargetFields } from "@/components/habit/target-fields";
 import { HABIT_COLORS, HABIT_ICONS } from "@/constants/habit-options";
 import { colors, radius, spacing } from "@/constants/theme";
 import { useHabits } from "@/context/habits-context";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { describeCurrent, describeGoal } from "@/lib/format";
 import { buildCurrent, buildGoal, draftsFromHabit, NEW_HABIT_DRAFTS, progressionBounds } from "@/lib/habit-draft";
 import { stackCandidates } from "@/lib/stacking";
@@ -28,6 +29,7 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
   const { habits } = useHabits();
   const start = initial ? draftsFromHabit(initial) : NEW_HABIT_DRAFTS;
   const candidates = stackCandidates(habits, initial?.id ?? null);
+  const keyboardHeight = useKeyboardHeight();
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [color, setColor] = useState(initial?.color ?? HABIT_COLORS[0]);
@@ -67,7 +69,13 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={styles.content}
+      // iOS makes room for the keyboard by itself (automaticallyAdjustKeyboardInsets).
+      // Android draws the app behind the keyboard, so add the keyboard's height as space
+      // at the bottom; that way the end of the form can always be scrolled above it.
+      contentContainerStyle={[
+        styles.content,
+        Platform.OS === "android" && { paddingBottom: CONTENT_BOTTOM_PADDING + keyboardHeight },
+      ]}
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
     >
@@ -205,6 +213,8 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
   );
 }
 
+const CONTENT_BOTTOM_PADDING = spacing.xl * 2;
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -213,7 +223,7 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     gap: spacing.lg,
-    paddingBottom: spacing.xl * 2,
+    paddingBottom: CONTENT_BOTTOM_PADDING,
   },
   section: {
     backgroundColor: colors.surface,
