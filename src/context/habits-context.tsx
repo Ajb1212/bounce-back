@@ -1,15 +1,14 @@
 import { useSQLiteContext } from "expo-sqlite";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-import { getAllHabits, insertHabit } from "@/db/habits-repository";
-import type { Habit } from "@/types/habit";
-
-type NewHabit = Omit<Habit, "id" | "createdAt">;
+import { getAllHabits, insertHabit, updateHabit as saveHabitChanges } from "@/db/habits-repository";
+import type { Habit, HabitInput } from "@/types/habit";
 
 interface HabitsContextValue {
   habits: Habit[];
   isLoading: boolean;
-  addHabit: (habit: NewHabit) => Promise<Habit>;
+  addHabit: (input: HabitInput) => Promise<Habit>;
+  updateHabit: (id: number, input: HabitInput) => Promise<Habit>;
 }
 
 const HabitsContext = createContext<HabitsContextValue | null>(null);
@@ -38,7 +37,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
     };
   }, [db]);
 
-  async function addHabit(input: NewHabit): Promise<Habit> {
+  async function addHabit(input: HabitInput): Promise<Habit> {
     const unsaved = { ...input, createdAt: new Date().toISOString() };
     const id = await insertHabit(db, unsaved);
     const habit: Habit = { ...unsaved, id };
@@ -46,7 +45,16 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
     return habit;
   }
 
-  return <HabitsContext.Provider value={{ habits, isLoading, addHabit }}>{children}</HabitsContext.Provider>;
+  async function updateHabit(id: number, input: HabitInput): Promise<Habit> {
+    const existing = habits.find((h) => h.id === id);
+    if (!existing) throw new Error(`Habit ${id} not found`);
+    const habit: Habit = { ...existing, ...input };
+    await saveHabitChanges(db, habit);
+    setHabits((prev) => prev.map((h) => (h.id === id ? habit : h)));
+    return habit;
+  }
+
+  return <HabitsContext.Provider value={{ habits, isLoading, addHabit, updateHabit }}>{children}</HabitsContext.Provider>;
 }
 
 export function useHabits(): HabitsContextValue {

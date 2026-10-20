@@ -12,6 +12,7 @@ export default function RootLayout() {
         <Stack>
           <Stack.Screen name="index" options={{ title: "Bounce Back" }} />
           <Stack.Screen name="new-habit" options={{ title: "New habit", presentation: "modal" }} />
+          <Stack.Screen name="habit/[id]" options={{ title: "Edit habit", presentation: "modal" }} />
         </Stack>
       </HabitsProvider>
     </SQLiteProvider>

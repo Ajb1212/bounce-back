@@ -1,5 +1,5 @@
 import { amountDirection, amountGap, timeGap, type Direction } from "@/lib/progression";
-import type { Amount, Current, Goal, GoalType, Interval, TimeOfDay } from "@/types/habit";
+import type { Amount, Current, Goal, GoalType, Habit, Interval, TimeOfDay } from "@/types/habit";
 
 /**
  * The form keeps every field for every goal type, so switching type back and forth
@@ -29,6 +29,56 @@ export const DEFAULT_PROGRESSION: ProgressionDraft = {
   value: 1,
   interval: { every: 7, period: "day" },
 };
+
+/** Everything the habit form edits about the goal and current state. */
+export interface HabitDrafts {
+  goalType: GoalType;
+  goal: TargetDraft;
+  afterHabitId: number | null;
+  hasCurrent: boolean;
+  current: TargetDraft;
+  hasProgression: boolean;
+  progression: ProgressionDraft;
+}
+
+export const NEW_HABIT_DRAFTS: HabitDrafts = {
+  goalType: "count",
+  goal: DEFAULT_TARGET,
+  afterHabitId: null,
+  hasCurrent: false,
+  current: DEFAULT_TARGET,
+  hasProgression: false,
+  progression: DEFAULT_PROGRESSION,
+};
+
+/** The reverse of buildGoal and buildCurrent: turns a saved habit back into form values. */
+export function draftsFromHabit({ goal, current }: Habit): HabitDrafts {
+  const goalDraft: TargetDraft = {
+    ...DEFAULT_TARGET,
+    ...(goal.type === "time" ? { time: goal.time } : { amount: goal.amount }),
+    ...(goal.type === "stack" ? {} : { interval: goal.interval }),
+  };
+  const currentDraft: TargetDraft = current
+    ? { ...goalDraft, ...(current.type === "time" ? { time: current.time } : { amount: current.amount }) }
+    : goalDraft;
+  const progression = current?.progression;
+
+  return {
+    goalType: goal.type,
+    goal: goalDraft,
+    afterHabitId: goal.type === "stack" ? goal.afterHabitId : null,
+    hasCurrent: current !== undefined,
+    current: currentDraft,
+    hasProgression: progression !== undefined,
+    progression: progression
+      ? {
+          timeDirection: progression.change >= 0 ? "increase" : "decrease",
+          value: Math.abs(progression.change),
+          interval: progression.interval,
+        }
+      : DEFAULT_PROGRESSION,
+  };
+}
 
 export interface ProgressionBounds {
   /** null when current already equals the goal, so there's nothing to progress. */

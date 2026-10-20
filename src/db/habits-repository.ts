@@ -46,3 +46,20 @@ export async function insertHabit(db: SQLiteDatabase, habit: Omit<Habit, "id">):
   );
   return result.lastInsertRowId;
 }
+
+/** Saves the edited fields. id and created_at never change. */
+export async function updateHabit(db: SQLiteDatabase, habit: Habit): Promise<void> {
+  await db.runAsync(
+    `UPDATE habits
+     SET title = $title, color = $color, icon = $icon, goal = $goal, current = $current
+     WHERE id = $id`,
+    {
+      $id: habit.id,
+      $title: habit.title,
+      $color: habit.color,
+      $icon: habit.icon,
+      $goal: JSON.stringify(habit.goal),
+      $current: habit.current ? JSON.stringify(habit.current) : null,
+    },
+  );
+}

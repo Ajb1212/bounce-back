@@ -58,3 +58,6 @@ export interface Habit {
   current?: Current;
   createdAt: string; // ISO date
 }
+
+/** What the user fills in on the habit form; id and createdAt are set when saving. */
+export type HabitInput = Omit<Habit, "id" | "createdAt">;

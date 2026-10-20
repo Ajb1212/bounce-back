@@ -15,15 +15,22 @@ export default function HomeScreen() {
         <Text style={styles.empty}>No habits yet. Create your first one.</Text>
       ) : (
         habits.map((habit) => (
-          <View key={habit.id} style={styles.card}>
-            <View style={[styles.iconBubble, { backgroundColor: habit.color }]}>
-              <Ionicons name={habit.icon} size={22} color={colors.onPrimary} />
-            </View>
-            <View style={styles.cardText}>
-              <Text style={styles.cardTitle}>{habit.title}</Text>
-              <Text style={styles.cardSubtitle}>{describeGoal(habit.goal, habits)}</Text>
-            </View>
-          </View>
+          <Link key={habit.id} href={{ pathname: "/habit/[id]", params: { id: String(habit.id) } }} asChild>
+            <Pressable
+              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              accessibilityRole="button"
+              accessibilityHint="Opens the habit for editing"
+            >
+              <View style={[styles.iconBubble, { backgroundColor: habit.color }]}>
+                <Ionicons name={habit.icon} size={22} color={colors.onPrimary} />
+              </View>
+              <View style={styles.cardText}>
+                <Text style={styles.cardTitle}>{habit.title}</Text>
+                <Text style={styles.cardSubtitle}>{describeGoal(habit.goal, habits)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+            </Pressable>
+          </Link>
         ))
       )}
 
@@ -59,6 +66,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
+  },
+  cardPressed: {
+    opacity: 0.7,
   },
   iconBubble: {
     width: 44,
