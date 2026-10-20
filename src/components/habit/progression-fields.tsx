@@ -5,53 +5,73 @@ import { Field } from "@/components/form/field";
 import { IntervalInput } from "@/components/form/interval-input";
 import { Stepper } from "@/components/form/stepper";
 import { colors } from "@/constants/theme";
-import type { ProgressionBounds, ProgressionDraft } from "@/lib/habit-draft";
-import type { Direction } from "@/lib/progression";
-import type { GoalType, Unit } from "@/types/habit";
-
-const TIME_DIRECTION_OPTIONS: { value: Direction; label: string }[] = [
-  { value: "decrease", label: "Earlier" },
-  { value: "increase", label: "Later" },
-];
+import type { ProgressionBounds, ProgressionDraft, ProgressionTarget } from "@/lib/habit-draft";
+import type { Frequency, Unit } from "@/types/habit";
 
 interface ProgressionFieldsProps {
-  type: GoalType;
+  /** Which number actually progresses (see effectiveTarget). */
+  target: ProgressionTarget;
   unit: Unit;
+  /** null for stacked habits, which have no frequency of their own. */
+  goalFrequency: Frequency | null;
   bounds: ProgressionBounds;
   draft: ProgressionDraft;
   onChange: (draft: ProgressionDraft) => void;
 }
 
-export function ProgressionFields({ type, unit, bounds, draft, onChange }: ProgressionFieldsProps) {
-  const isTime = type === "time";
-  // For time goals the progression moves the time of day, so it is always in minutes.
-  const changeUnit: Unit = isTime ? "minutes" : unit;
-  const label = isTime ? "Move the time" : bounds.direction === "decrease" ? "Decrease by" : "Increase by";
+function stepSuffix(target: ProgressionTarget, unit: Unit, frequency: Frequency | null): string {
+  if (target === "amount") return unit === "minutes" ? "min" : "times";
+  switch (frequency?.kind) {
+    case "everyNDays":
+      return "days between times";
+    case "timesPerWeek":
+      return "times per week";
+    case "timesPerMonth":
+      return "times per month";
+    case "timesInDays":
+      return `times in ${frequency.days} days`;
+    default:
+      return "";
+  }
+}
+
+export function ProgressionFields({ target, unit, goalFrequency, bounds, draft, onChange }: ProgressionFieldsProps) {
+  const { direction, gap } = bounds[target];
+  // Only offer a choice when both numbers differ from the goal; otherwise only one can progress.
+  const canChoose = bounds.amount.direction !== null && bounds.frequency.direction !== null;
 
   return (
     <>
-      <Field label={label} hint={isTime ? undefined : "Set by comparing your current state with the goal."}>
-        {/* Around the clock both ways reach the goal, so for time the user picks the way. */}
-        {isTime ? (
+      {canChoose ? (
+        <Field label="What should change">
           <ChipGroup
-            options={TIME_DIRECTION_OPTIONS}
-            value={draft.timeDirection}
-            onChange={(timeDirection) => onChange({ ...draft, timeDirection })}
+            options={[
+              { value: "amount", label: "How much each time" },
+              { value: "frequency", label: "How often" },
+            ]}
+            value={target}
+            onChange={(next) => onChange({ ...draft, target: next })}
           />
-        ) : null}
+          <Text style={styles.note}>The other one stays as it is now.</Text>
+        </Field>
+      ) : null}
+
+      <Field
+        label={direction === "decrease" ? "Decrease by" : "Increase by"}
+        hint="Set by comparing your current state with the goal."
+      >
         <Stepper
-          value={Math.min(draft.value, bounds.gap)}
+          value={Math.min(draft.value, gap)}
           min={1}
-          max={bounds.gap}
-          step={changeUnit === "minutes" ? 5 : 1}
-          suffix={changeUnit === "minutes" ? "min" : "times"}
+          max={gap}
+          step={target === "amount" && unit === "minutes" ? 5 : 1}
+          suffix={stepSuffix(target, unit, goalFrequency)}
           onChange={(value) => onChange({ ...draft, value })}
         />
-        <Text style={styles.note}>
-          Stops at the goal. At most {bounds.gap} {changeUnit === "minutes" ? "min" : "times"} per step.
-        </Text>
+        <Text style={styles.note}>Stops at the goal. At most {gap} per step.</Text>
       </Field>
-      <Field label="How often">
+
+      <Field label="Change how often">
         <IntervalInput value={draft.interval} onChange={(interval) => onChange({ ...draft, interval })} />
       </Field>
     </>

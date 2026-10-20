@@ -3,50 +3,55 @@ import type { ComponentProps } from "react";
 
 export type IconName = ComponentProps<typeof Ionicons>["name"];
 
-export type GoalType = "count" | "time" | "stack";
+export type GoalType = "count" | "stack";
 export type Unit = "times" | "minutes";
 export type Period = "day" | "week" | "month";
 
-/** A repeating window: { every: 1, period: "day" } = per day, { every: 16, period: "day" } = every 16 days. */
+/** A repeating window: { every: 1, period: "day" } = every day, { every: 2, period: "week" } = every 2 weeks. */
 export interface Interval {
   every: number;
   period: Period;
 }
 
-/** How much of the habit: 4 times, or 30 minutes. */
+/** How much each time: 20 times, or 30 minutes. */
 export interface Amount {
   value: number;
   unit: Unit;
 }
 
-export interface TimeOfDay {
-  hour: number; // 0-23
-  minute: number; // 0-59
-}
+/** How often the habit happens. */
+export type Frequency =
+  | { kind: "daily" }
+  | { kind: "everyNDays"; days: number }
+  | { kind: "timesPerWeek"; times: number }
+  | { kind: "timesPerMonth"; times: number }
+  | { kind: "timesInDays"; times: number; days: number };
+
+export type FrequencyKind = Frequency["kind"];
 
 export type Goal =
-  | { type: "count"; amount: Amount; interval: Interval }
-  | { type: "time"; time: TimeOfDay; interval: Interval }
-  // A stacked habit happens right after another habit, so it inherits that habit's repetition.
+  | { type: "count"; amount: Amount; frequency: Frequency }
+  // A stacked habit happens right after another habit, so it inherits that habit's timing.
   | { type: "stack"; afterHabitId: number; amount: Amount };
 
 /**
- * A gradual change applied to the current state, e.g. +1 time every 14 days.
- * `change` is in the goal's unit, or in minutes for time goals (positive = later).
- * Negative means decrease. It never moves past the goal: once reached, it stays there.
+ * A gradual change applied to the current state, e.g. +2 times every 7 days.
+ * `target` says which number changes: the amount, or the frequency's number
+ * (times per week/month/in N days, or the N in every N days).
+ * Negative `change` means decrease. It never moves past the goal: once reached, it stays there.
  */
 export interface Progression {
+  target: "amount" | "frequency";
   change: number;
   interval: Interval;
 }
 
 /**
  * Where the user is today. Always the same type and unit as the goal,
- * and it repeats on the goal's interval, so only the amount or time differs.
+ * and the same frequency kind, but the numbers can differ.
  */
 export type Current =
-  | { type: "count"; amount: Amount; progression?: Progression }
-  | { type: "time"; time: TimeOfDay; progression?: Progression }
+  | { type: "count"; amount: Amount; frequency: Frequency; progression?: Progression }
   | { type: "stack"; amount: Amount; progression?: Progression };
 
 export interface Habit {

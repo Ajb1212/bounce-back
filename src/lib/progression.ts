@@ -1,37 +1,19 @@
-import type { Amount, Habit, Interval, TimeOfDay } from "@/types/habit";
+import { frequencyCount, withFrequencyCount } from "@/lib/frequency";
+import type { Amount, Frequency, Habit, Interval } from "@/types/habit";
 
 export type Direction = "increase" | "decrease";
 
-const MINUTES_PER_DAY = 24 * 60;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-export function toMinutes({ hour, minute }: TimeOfDay): number {
-  return hour * 60 + minute;
-}
-
-export function fromMinutes(total: number): TimeOfDay {
-  const wrapped = ((total % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
-  return { hour: Math.floor(wrapped / 60), minute: wrapped % 60 };
-}
-
-/** Which way the current amount has to move to reach the goal, or null if it's already there. */
+/** Which way the current number has to move to reach the goal, or null if it's already there. */
 export function amountDirection(current: number, goal: number): Direction | null {
   if (current === goal) return null;
   return current < goal ? "increase" : "decrease";
 }
 
-/** How far the current amount is from the goal. */
+/** How far the current number is from the goal. */
 export function amountGap(current: number, goal: number): number {
   return Math.abs(goal - current);
-}
-
-/**
- * Minutes from `from` to `to` moving in one direction around the clock.
- * "increase" means later: 23:00 → 01:00 is 120 min later, or 1320 min earlier.
- */
-export function timeGap(from: TimeOfDay, to: TimeOfDay, direction: Direction): number {
-  const diff = direction === "increase" ? toMinutes(to) - toMinutes(from) : toMinutes(from) - toMinutes(to);
-  return ((diff % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
 }
 
 /** How many whole intervals have passed between start and date. */
@@ -50,7 +32,17 @@ export function stepsElapsed(start: Date, date: Date, { every, period }: Interva
   return Math.floor(days / daysPerStep);
 }
 
-export type Target = { type: "count" | "stack"; amount: Amount } | { type: "time"; time: TimeOfDay };
+/** Moves `from` toward `to` by `moved`, never past `to`. */
+function moveToward(from: number, to: number, moved: number): number {
+  const shift = Math.min(moved, amountGap(from, to));
+  return from < to ? from + shift : from - shift;
+}
+
+/** `frequency` is null for stacked habits: they follow the other habit's timing. */
+export interface Target {
+  amount: Amount;
+  frequency: Frequency | null;
+}
 
 /**
  * What the user should aim for on a given date: the current state moved toward
@@ -58,24 +50,23 @@ export type Target = { type: "count" | "stack"; amount: Amount } | { type: "time
  */
 export function targetOn(habit: Habit, date: Date): Target {
   const { goal, current } = habit;
-  const goalTarget: Target =
-    goal.type === "time" ? { type: "time", time: goal.time } : { type: goal.type, amount: goal.amount };
-  if (!current) return goalTarget;
+  const goalFrequency = goal.type === "count" ? goal.frequency : null;
+  if (!current) return { amount: goal.amount, frequency: goalFrequency };
 
+  const amount = current.amount;
+  const frequency = current.type === "count" ? current.frequency : null;
   const progression = current.progression;
-  const moved = progression
-    ? stepsElapsed(new Date(habit.createdAt), date, progression.interval) * Math.abs(progression.change)
-    : 0;
-  const direction: Direction = progression && progression.change < 0 ? "decrease" : "increase";
-  const sign = direction === "increase" ? 1 : -1;
+  if (!progression) return { amount, frequency };
 
-  if (current.type === "time" && goal.type === "time") {
-    const shift = Math.min(moved, timeGap(current.time, goal.time, direction));
-    return { type: "time", time: fromMinutes(toMinutes(current.time) + sign * shift) };
+  const moved =
+    stepsElapsed(new Date(habit.createdAt), date, progression.interval) * Math.abs(progression.change);
+
+  if (progression.target === "amount") {
+    return { amount: { ...amount, value: moveToward(amount.value, goal.amount.value, moved) }, frequency };
   }
-  if (current.type !== "time" && goal.type !== "time") {
-    const shift = Math.min(moved, amountGap(current.amount.value, goal.amount.value));
-    return { type: goal.type, amount: { ...current.amount, value: current.amount.value + sign * shift } };
-  }
-  return goalTarget;
+
+  const currentCount = frequency ? frequencyCount(frequency) : null;
+  const goalCount = goalFrequency ? frequencyCount(goalFrequency) : null;
+  if (!frequency || currentCount === null || goalCount === null) return { amount, frequency };
+  return { amount, frequency: withFrequencyCount(frequency, moveToward(currentCount, goalCount, moved)) };
 }

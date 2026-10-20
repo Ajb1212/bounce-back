@@ -12,7 +12,14 @@ import { colors, radius, spacing } from "@/constants/theme";
 import { useHabits } from "@/context/habits-context";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { describeCurrent, describeGoal } from "@/lib/format";
-import { buildCurrent, buildGoal, draftsFromHabit, NEW_HABIT_DRAFTS, progressionBounds } from "@/lib/habit-draft";
+import {
+  buildCurrent,
+  buildGoal,
+  draftsFromHabit,
+  effectiveTarget,
+  NEW_HABIT_DRAFTS,
+  progressionBounds,
+} from "@/lib/habit-draft";
 import { stackCandidates } from "@/lib/stacking";
 import type { GoalType, Habit, HabitInput, IconName } from "@/types/habit";
 
@@ -46,7 +53,9 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
 
   const unit = goalDraft.amount.unit;
   const goal = buildGoal(goalType, goalDraft, afterHabitId);
-  const bounds = progressionBounds(goalType, goalDraft, currentDraft, progressionDraft.timeDirection);
+  const bounds = progressionBounds(goalType, goalDraft, currentDraft);
+  const progressionTarget = effectiveTarget(progressionDraft, bounds);
+  const goalFrequency = goal?.type === "count" ? goal.frequency : null;
   const current =
     goal && hasCurrent
       ? buildCurrent(goal, goalDraft, currentDraft, hasProgression ? progressionDraft : null)
@@ -102,8 +111,7 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
         <Field label="Type">
           <ChipGroup
             options={[
-              { value: "count", label: "Count" },
-              { value: "time", label: "At a time" },
+              { value: "count", label: "On a schedule" },
               { value: "stack", label: "After a habit", disabled: candidates.length === 0 },
             ]}
             value={goalType}
@@ -129,7 +137,7 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
 
       <Section
         title="Current"
-        subtitle="Optional. Where you are today, if you already do this. Repeats on the same schedule as the goal."
+        subtitle="Optional. Where you are today, if you already do this."
       >
         <ToggleRow label="I already do this" value={hasCurrent} onChange={setHasCurrent} />
         {hasCurrent ? (
@@ -140,9 +148,10 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
               onChange={setCurrentDraft}
               mode="current"
               unit={unit}
+              goalFrequency={goalFrequency ?? undefined}
             />
             {/* When current equals the goal there is nothing to progress. */}
-            {bounds.direction ? (
+            {progressionTarget ? (
               <>
                 <ToggleRow
                   label="Progress gradually toward the goal"
@@ -151,8 +160,9 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
                 />
                 {hasProgression ? (
                   <ProgressionFields
-                    type={goalType}
+                    target={progressionTarget}
                     unit={unit}
+                    goalFrequency={goalFrequency}
                     bounds={bounds}
                     draft={progressionDraft}
                     onChange={setProgressionDraft}
@@ -174,7 +184,7 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
         {current ? (
           <Text style={styles.summary}>
             <Text style={styles.summaryLabel}>Current: </Text>
-            {goal ? describeCurrent(current, goal) : null}
+            {describeCurrent(current)}
           </Text>
         ) : null}
       </Section>

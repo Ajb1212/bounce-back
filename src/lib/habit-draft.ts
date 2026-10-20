@@ -1,31 +1,49 @@
-import { amountDirection, amountGap, timeGap, type Direction } from "@/lib/progression";
-import type { Amount, Current, Goal, GoalType, Habit, Interval, TimeOfDay } from "@/types/habit";
+import { frequencyCount, withFrequencyCount } from "@/lib/frequency";
+import { amountDirection, amountGap, type Direction } from "@/lib/progression";
+import type { Amount, Current, Frequency, FrequencyKind, Goal, GoalType, Habit, Interval, Progression } from "@/types/habit";
 
 /**
- * The form keeps every field for every goal type, so switching type back and forth
- * doesn't lose what the user typed. The build functions below pick the fields that matter.
+ * The form keeps a number for every frequency kind, so switching kind back and forth
+ * doesn't lose what the user typed. frequencyFromDraft picks the ones that matter.
  */
-export interface TargetDraft {
-  amount: Amount;
-  time: TimeOfDay;
-  interval: Interval;
+export interface FrequencyDraft {
+  kind: FrequencyKind;
+  everyDays: number;
+  perWeek: number;
+  perMonth: number;
+  times: number;
+  inDays: number;
 }
 
+export interface TargetDraft {
+  amount: Amount;
+  frequency: FrequencyDraft;
+}
+
+export type ProgressionTarget = Progression["target"];
+
 export interface ProgressionDraft {
-  /** Only used for time goals. For amounts the direction follows from current vs goal. */
-  timeDirection: Direction;
+  target: ProgressionTarget;
   value: number;
   interval: Interval;
 }
 
-export const DEFAULT_TARGET: TargetDraft = {
-  amount: { value: 1, unit: "times" },
-  time: { hour: 8, minute: 0 },
-  interval: { every: 1, period: "day" },
+const DEFAULT_FREQUENCY: FrequencyDraft = {
+  kind: "daily",
+  everyDays: 2,
+  perWeek: 3,
+  perMonth: 10,
+  times: 12,
+  inDays: 16,
 };
 
-export const DEFAULT_PROGRESSION: ProgressionDraft = {
-  timeDirection: "decrease",
+const DEFAULT_TARGET: TargetDraft = {
+  amount: { value: 1, unit: "times" },
+  frequency: DEFAULT_FREQUENCY,
+};
+
+const DEFAULT_PROGRESSION: ProgressionDraft = {
+  target: "amount",
   value: 1,
   interval: { every: 7, period: "day" },
 };
@@ -51,15 +69,54 @@ export const NEW_HABIT_DRAFTS: HabitDrafts = {
   progression: DEFAULT_PROGRESSION,
 };
 
+export function frequencyFromDraft(draft: FrequencyDraft): Frequency {
+  switch (draft.kind) {
+    case "daily":
+      return { kind: "daily" };
+    case "everyNDays":
+      return { kind: "everyNDays", days: draft.everyDays };
+    case "timesPerWeek":
+      return { kind: "timesPerWeek", times: draft.perWeek };
+    case "timesPerMonth":
+      return { kind: "timesPerMonth", times: draft.perMonth };
+    case "timesInDays":
+      return { kind: "timesInDays", times: draft.times, days: draft.inDays };
+  }
+}
+
+function draftFromFrequency(frequency: Frequency): FrequencyDraft {
+  const draft: FrequencyDraft = { ...DEFAULT_FREQUENCY, kind: frequency.kind };
+  switch (frequency.kind) {
+    case "everyNDays":
+      return { ...draft, everyDays: frequency.days };
+    case "timesPerWeek":
+      return { ...draft, perWeek: frequency.times };
+    case "timesPerMonth":
+      return { ...draft, perMonth: frequency.times };
+    case "timesInDays":
+      return { ...draft, times: frequency.times, inDays: frequency.days };
+    case "daily":
+      return draft;
+  }
+}
+
+/** The current state always has the goal's frequency kind; only its number comes from the current draft. */
+function currentFrequency(goal: Frequency, current: FrequencyDraft): Frequency {
+  const count = frequencyCount(frequencyFromDraft({ ...current, kind: goal.kind }));
+  return count === null ? goal : withFrequencyCount(goal, count);
+}
+
 /** The reverse of buildGoal and buildCurrent: turns a saved habit back into form values. */
 export function draftsFromHabit({ goal, current }: Habit): HabitDrafts {
   const goalDraft: TargetDraft = {
-    ...DEFAULT_TARGET,
-    ...(goal.type === "time" ? { time: goal.time } : { amount: goal.amount }),
-    ...(goal.type === "stack" ? {} : { interval: goal.interval }),
+    amount: goal.amount,
+    frequency: goal.type === "count" ? draftFromFrequency(goal.frequency) : DEFAULT_FREQUENCY,
   };
   const currentDraft: TargetDraft = current
-    ? { ...goalDraft, ...(current.type === "time" ? { time: current.time } : { amount: current.amount }) }
+    ? {
+        amount: current.amount,
+        frequency: current.type === "count" ? draftFromFrequency(current.frequency) : goalDraft.frequency,
+      }
     : goalDraft;
   const progression = current?.progression;
 
@@ -71,75 +128,80 @@ export function draftsFromHabit({ goal, current }: Habit): HabitDrafts {
     current: currentDraft,
     hasProgression: progression !== undefined,
     progression: progression
-      ? {
-          timeDirection: progression.change >= 0 ? "increase" : "decrease",
-          value: Math.abs(progression.change),
-          interval: progression.interval,
-        }
+      ? { target: progression.target, value: Math.abs(progression.change), interval: progression.interval }
       : DEFAULT_PROGRESSION,
   };
 }
 
-export interface ProgressionBounds {
+export interface Bounds {
   /** null when current already equals the goal, so there's nothing to progress. */
   direction: Direction | null;
   /** The largest useful step: anything bigger would jump past the goal. */
   gap: number;
 }
 
-export function progressionBounds(
-  type: GoalType,
-  goal: TargetDraft,
-  current: TargetDraft,
-  timeDirection: Direction,
-): ProgressionBounds {
-  if (type === "time") {
-    const gap = timeGap(current.time, goal.time, timeDirection);
-    return { direction: gap === 0 ? null : timeDirection, gap };
-  }
+export type ProgressionBounds = Record<ProgressionTarget, Bounds>;
+
+const AT_GOAL: Bounds = { direction: null, gap: 0 };
+
+function bounds(current: number, goal: number): Bounds {
+  return { direction: amountDirection(current, goal), gap: amountGap(current, goal) };
+}
+
+/** How far current is from the goal, for the amount and for the frequency's number. */
+export function progressionBounds(type: GoalType, goal: TargetDraft, current: TargetDraft): ProgressionBounds {
+  const amount = bounds(current.amount.value, goal.amount.value);
+  if (type === "stack") return { amount, frequency: AT_GOAL };
+
+  const goalFrequency = frequencyFromDraft(goal.frequency);
+  const goalCount = frequencyCount(goalFrequency);
+  const currentCount = frequencyCount(currentFrequency(goalFrequency, current.frequency));
   return {
-    direction: amountDirection(current.amount.value, goal.amount.value),
-    gap: amountGap(current.amount.value, goal.amount.value),
+    amount,
+    frequency: goalCount === null || currentCount === null ? AT_GOAL : bounds(currentCount, goalCount),
   };
+}
+
+/** The target the user picked, or the other one if the picked one is already at the goal. */
+export function effectiveTarget(draft: ProgressionDraft, b: ProgressionBounds): ProgressionTarget | null {
+  if (b[draft.target].direction) return draft.target;
+  const other: ProgressionTarget = draft.target === "amount" ? "frequency" : "amount";
+  return b[other].direction ? other : null;
 }
 
 export function buildGoal(type: GoalType, draft: TargetDraft, afterHabitId: number | null): Goal | null {
   switch (type) {
     case "count":
-      return { type, amount: draft.amount, interval: draft.interval };
-    case "time":
-      return { type, time: draft.time, interval: draft.interval };
+      return { type, amount: draft.amount, frequency: frequencyFromDraft(draft.frequency) };
     case "stack":
       if (afterHabitId === null) return null;
       return { type, afterHabitId, amount: draft.amount };
   }
 }
 
-/** The current state always uses the goal's type, unit and interval. */
+/** The current state always uses the goal's type, unit and frequency kind. */
 export function buildCurrent(
   goal: Goal,
   goalDraft: TargetDraft,
   draft: TargetDraft,
   progression: ProgressionDraft | null,
 ): Current {
-  const { direction, gap } = progressionBounds(goal.type, goalDraft, draft, progression?.timeDirection ?? "increase");
-  const built =
-    progression && direction
+  const b = progressionBounds(goal.type, goalDraft, draft);
+  const target = progression ? effectiveTarget(progression, b) : null;
+  const built: Progression | undefined =
+    progression && target
       ? {
-          change: (direction === "increase" ? 1 : -1) * Math.min(progression.value, gap),
+          target,
+          change: (b[target].direction === "increase" ? 1 : -1) * Math.min(progression.value, b[target].gap),
           interval: progression.interval,
         }
       : undefined;
+  const amount: Amount = { value: draft.amount.value, unit: goal.amount.unit };
 
   switch (goal.type) {
     case "count":
+      return { type: "count", amount, frequency: currentFrequency(goal.frequency, draft.frequency), progression: built };
     case "stack":
-      return {
-        type: goal.type,
-        amount: { value: draft.amount.value, unit: goal.amount.unit },
-        progression: built,
-      };
-    case "time":
-      return { type: "time", time: draft.time, progression: built };
+      return { type: "stack", amount, progression: built };
   }
 }

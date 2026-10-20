@@ -5,7 +5,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
  * SQLite stores the version in `PRAGMA user_version`, so each device only runs the steps it hasn't run yet.
  * Never edit a step that has already shipped; add a new one instead.
  */
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
@@ -48,6 +48,14 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
       `);
     });
     version = 2;
+  }
+
+  if (version === 2) {
+    // The goal JSON changed shape: "at a time" goals were removed and count goals now use
+    // a frequency instead of an interval. Old goals meant something different and can't be
+    // converted reliably; only test data existed, so it is cleared.
+    await db.execAsync("DELETE FROM habits;");
+    version = 3;
   }
 
   await db.execAsync(`PRAGMA user_version = ${version}`);
