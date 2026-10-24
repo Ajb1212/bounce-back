@@ -1,6 +1,20 @@
 import { frequencyCount, withFrequencyCount } from "@/lib/frequency";
 import { amountDirection, amountGap, type Direction } from "@/lib/progression";
-import type { Amount, Current, Frequency, FrequencyKind, Goal, GoalType, Habit, Interval, Progression } from "@/types/habit";
+import { toLocalDateString } from "@/lib/reminder-plan";
+import type {
+  Amount,
+  Current,
+  Frequency,
+  FrequencyKind,
+  Goal,
+  GoalType,
+  Habit,
+  Interval,
+  Progression,
+  Reminder,
+  ReminderSlot,
+  TimeOfDay,
+} from "@/types/habit";
 
 /**
  * The form keeps a number for every frequency kind, so switching kind back and forth
@@ -48,6 +62,29 @@ const DEFAULT_PROGRESSION: ProgressionDraft = {
   interval: { every: 7, period: "day" },
 };
 
+/** Like the frequency draft, it keeps the values of every kind so switching kind loses nothing. */
+export interface ReminderDraft {
+  enabled: boolean;
+  /** Used by every day and every N days, and as the starting time for newly picked days. */
+  time: TimeOfDay;
+  weekDays: ReminderSlot[];
+  monthDays: ReminderSlot[];
+  cycleSlots: ReminderSlot[];
+  /** Kept from the saved habit so editing doesn't restart the cycle; null = starts today. */
+  startDate: string | null;
+}
+
+const DEFAULT_TIME: TimeOfDay = { hour: 20, minute: 0 };
+
+const DEFAULT_REMINDER: ReminderDraft = {
+  enabled: false,
+  time: DEFAULT_TIME,
+  weekDays: [],
+  monthDays: [],
+  cycleSlots: [{ day: 1, time: DEFAULT_TIME }],
+  startDate: null,
+};
+
 /** Everything the habit form edits about the goal and current state. */
 export interface HabitDrafts {
   goalType: GoalType;
@@ -57,6 +94,7 @@ export interface HabitDrafts {
   current: TargetDraft;
   hasProgression: boolean;
   progression: ProgressionDraft;
+  reminder: ReminderDraft;
 }
 
 export const NEW_HABIT_DRAFTS: HabitDrafts = {
@@ -67,6 +105,7 @@ export const NEW_HABIT_DRAFTS: HabitDrafts = {
   current: DEFAULT_TARGET,
   hasProgression: false,
   progression: DEFAULT_PROGRESSION,
+  reminder: DEFAULT_REMINDER,
 };
 
 export function frequencyFromDraft(draft: FrequencyDraft): Frequency {
@@ -107,7 +146,24 @@ function currentFrequency(goal: Frequency, current: FrequencyDraft): Frequency {
 }
 
 /** The reverse of buildGoal and buildCurrent: turns a saved habit back into form values. */
-export function draftsFromHabit({ goal, current }: Habit): HabitDrafts {
+function reminderDraftFrom(reminder: Reminder | undefined): ReminderDraft {
+  if (!reminder) return DEFAULT_REMINDER;
+  const draft: ReminderDraft = { ...DEFAULT_REMINDER, enabled: true };
+  switch (reminder.kind) {
+    case "daily":
+      return { ...draft, time: reminder.time };
+    case "timesPerWeek":
+      return { ...draft, weekDays: reminder.days };
+    case "timesPerMonth":
+      return { ...draft, monthDays: reminder.days };
+    case "everyNDays":
+      return { ...draft, time: reminder.time, startDate: reminder.startDate };
+    case "timesInDays":
+      return { ...draft, cycleSlots: reminder.slots, startDate: reminder.startDate };
+  }
+}
+
+export function draftsFromHabit({ goal, current, reminder }: Habit): HabitDrafts {
   const goalDraft: TargetDraft = {
     amount: goal.amount,
     frequency: goal.type === "count" ? draftFromFrequency(goal.frequency) : DEFAULT_FREQUENCY,
@@ -130,7 +186,41 @@ export function draftsFromHabit({ goal, current }: Habit): HabitDrafts {
     progression: progression
       ? { target: progression.target, value: Math.abs(progression.change), interval: progression.interval }
       : DEFAULT_PROGRESSION,
+    reminder: reminderDraftFrom(reminder),
   };
+}
+
+export type ReminderResult = { reminder?: Reminder; error?: undefined } | { reminder?: undefined; error: string };
+
+/**
+ * Turns the reminder fields into the saved reminder, matching the goal's frequency.
+ * Returns an error message instead when reminders are on but incomplete.
+ */
+export function buildReminder(goal: Goal | null, draft: ReminderDraft, today: Date): ReminderResult {
+  if (!draft.enabled || goal?.type !== "count") return {};
+  const startDate = draft.startDate ?? toLocalDateString(today);
+  const frequency = goal.frequency;
+
+  switch (frequency.kind) {
+    case "daily":
+      return { reminder: { kind: "daily", time: draft.time } };
+    case "timesPerWeek":
+      if (draft.weekDays.length === 0) return { error: "Pick at least one day for reminders." };
+      return { reminder: { kind: "timesPerWeek", days: [...draft.weekDays].sort((a, b) => a.day - b.day) } };
+    case "timesPerMonth":
+      if (draft.monthDays.length === 0) return { error: "Pick at least one day for reminders." };
+      return { reminder: { kind: "timesPerMonth", days: [...draft.monthDays].sort((a, b) => a.day - b.day) } };
+    case "everyNDays":
+      return { reminder: { kind: "everyNDays", time: draft.time, startDate } };
+    case "timesInDays": {
+      // The cycle may have been shortened after the slots were picked.
+      const slots = draft.cycleSlots
+        .map((slot) => ({ ...slot, day: Math.min(slot.day, frequency.days) }))
+        .sort((a, b) => a.day - b.day || a.time.hour - b.time.hour || a.time.minute - b.time.minute);
+      if (slots.length === 0) return { error: "Add at least one reminder." };
+      return { reminder: { kind: "timesInDays", slots, startDate } };
+    }
+  }
 }
 
 export interface Bounds {

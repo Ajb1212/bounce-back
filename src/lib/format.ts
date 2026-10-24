@@ -1,4 +1,26 @@
-import type { Amount, Current, Frequency, Goal, Habit, Interval, Progression } from "@/types/habit";
+import type {
+  Amount,
+  Current,
+  Frequency,
+  Goal,
+  Habit,
+  Interval,
+  Progression,
+  Reminder,
+  ReminderSlot,
+  TimeOfDay,
+  Weekday,
+} from "@/types/habit";
+
+export const WEEKDAY_NAMES: Record<Weekday, string> = {
+  1: "Mon",
+  2: "Tue",
+  3: "Wed",
+  4: "Thu",
+  5: "Fri",
+  6: "Sat",
+  7: "Sun",
+};
 
 function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -79,4 +101,33 @@ export function describeCurrent(current: Current): string {
   let text = frequency ? amountWithFrequency(current.amount, frequency) : formatAmount(current.amount);
   if (current.progression) text += `; ${formatProgression(current.progression, current.amount, frequency)}`;
   return text;
+}
+
+export function formatTime({ hour, minute }: TimeOfDay): string {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function ordinal(n: number): string {
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${suffix}`;
+}
+
+function formatSlots(slots: ReminderSlot[], label: (day: number) => string): string {
+  return slots.map((slot) => `${label(slot.day)} at ${formatTime(slot.time)}`).join(", ");
+}
+
+/** "Mon at 08:00, Wed at 20:00", "day 1 at 12:00, day 4 at 20:00" */
+export function describeReminder(reminder: Reminder): string {
+  switch (reminder.kind) {
+    case "daily":
+      return `every day at ${formatTime(reminder.time)}`;
+    case "timesPerWeek":
+      return formatSlots(reminder.days, (day) => WEEKDAY_NAMES[day as Weekday]);
+    case "timesPerMonth":
+      return `on the ${formatSlots(reminder.days, ordinal)}`;
+    case "everyNDays":
+      return `at ${formatTime(reminder.time)}, starting ${reminder.startDate}`;
+    case "timesInDays":
+      return `${formatSlots(reminder.slots, (day) => `day ${day}`)} of each cycle, starting ${reminder.startDate}`;
+  }
 }

@@ -2,6 +2,7 @@ import { useSQLiteContext } from "expo-sqlite";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { getAllHabits, insertHabit, updateHabit as saveHabitChanges } from "@/db/habits-repository";
+import { syncAllReminders, syncHabitReminders } from "@/notifications/reminders";
 import type { Habit, HabitInput } from "@/types/habit";
 
 interface HabitsContextValue {
@@ -12,6 +13,11 @@ interface HabitsContextValue {
 }
 
 const HabitsContext = createContext<HabitsContextValue | null>(null);
+
+/** The habit is already saved, so a scheduling problem is logged instead of failing the save. */
+function scheduleReminders(habit: Habit): void {
+  syncHabitReminders(habit).catch((error) => console.error("Failed to schedule reminders", error));
+}
 
 /**
  * Loads the habits from SQLite once, then keeps them in memory for the screens.
@@ -26,7 +32,9 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     getAllHabits(db)
       .then((loaded) => {
-        if (!cancelled) setHabits(loaded);
+        if (cancelled) return;
+        setHabits(loaded);
+        syncAllReminders(loaded).catch((error) => console.error("Failed to schedule reminders", error));
       })
       .catch((error) => console.error("Failed to load habits", error))
       .finally(() => {
@@ -42,6 +50,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
     const id = await insertHabit(db, unsaved);
     const habit: Habit = { ...unsaved, id };
     setHabits((prev) => [...prev, habit]);
+    scheduleReminders(habit);
     return habit;
   }
 
@@ -51,6 +60,7 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
     const habit: Habit = { ...existing, ...input };
     await saveHabitChanges(db, habit);
     setHabits((prev) => prev.map((h) => (h.id === id ? habit : h)));
+    scheduleReminders(habit);
     return habit;
   }
 

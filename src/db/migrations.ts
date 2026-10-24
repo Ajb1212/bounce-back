@@ -5,7 +5,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
  * SQLite stores the version in `PRAGMA user_version`, so each device only runs the steps it hasn't run yet.
  * Never edit a step that has already shipped; add a new one instead.
  */
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 5;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
@@ -56,6 +56,32 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     // converted reliably; only test data existed, so it is cleared.
     await db.execAsync("DELETE FROM habits;");
     version = 3;
+  }
+
+  if (version === 3) {
+    // Reminder settings, as JSON. NULL means no notifications. Existing habits keep their data.
+    await db.execAsync("ALTER TABLE habits ADD COLUMN reminder TEXT;");
+    version = 4;
+  }
+
+  if (version === 4) {
+    // Weekly reminders now have a time per day, like monthly ones:
+    // { weekdays: [1, 3], time } becomes { days: [{ day: 1, time }, { day: 3, time }] }.
+    const rows = await db.getAllAsync<{ id: number; reminder: string }>(
+      "SELECT id, reminder FROM habits WHERE reminder IS NOT NULL",
+    );
+    await db.withTransactionAsync(async () => {
+      for (const row of rows) {
+        const reminder = JSON.parse(row.reminder);
+        if (reminder.kind !== "timesPerWeek" || !Array.isArray(reminder.weekdays)) continue;
+        const days = reminder.weekdays.map((day: number) => ({ day, time: reminder.time }));
+        await db.runAsync("UPDATE habits SET reminder = $reminder WHERE id = $id", {
+          $id: row.id,
+          $reminder: JSON.stringify({ kind: "timesPerWeek", days }),
+        });
+      }
+    });
+    version = 5;
   }
 
   await db.execAsync(`PRAGMA user_version = ${version}`);

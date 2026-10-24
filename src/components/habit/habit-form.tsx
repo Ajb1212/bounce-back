@@ -6,21 +6,24 @@ import { ColorPicker } from "@/components/form/color-picker";
 import { Field } from "@/components/form/field";
 import { IconPicker } from "@/components/form/icon-picker";
 import { ProgressionFields } from "@/components/habit/progression-fields";
+import { ReminderFields } from "@/components/habit/reminder-fields";
 import { TargetFields } from "@/components/habit/target-fields";
 import { HABIT_COLORS, HABIT_ICONS } from "@/constants/habit-options";
 import { colors, radius, spacing } from "@/constants/theme";
 import { useHabits } from "@/context/habits-context";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
-import { describeCurrent, describeGoal } from "@/lib/format";
+import { describeCurrent, describeGoal, describeReminder } from "@/lib/format";
 import {
   buildCurrent,
   buildGoal,
+  buildReminder,
   draftsFromHabit,
   effectiveTarget,
   NEW_HABIT_DRAFTS,
   progressionBounds,
 } from "@/lib/habit-draft";
 import { stackCandidates } from "@/lib/stacking";
+import { ensureNotificationPermission } from "@/notifications/reminders";
 import type { GoalType, Habit, HabitInput, IconName } from "@/types/habit";
 
 interface HabitFormProps {
@@ -50,6 +53,7 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
   const [currentDraft, setCurrentDraft] = useState(start.current);
   const [hasProgression, setHasProgression] = useState(start.hasProgression);
   const [progressionDraft, setProgressionDraft] = useState(start.progression);
+  const [reminderDraft, setReminderDraft] = useState(start.reminder);
 
   const unit = goalDraft.amount.unit;
   const goal = buildGoal(goalType, goalDraft, afterHabitId);
@@ -60,14 +64,34 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
     goal && hasCurrent
       ? buildCurrent(goal, goalDraft, currentDraft, hasProgression ? progressionDraft : null)
       : undefined;
+  const reminderResult = buildReminder(goal, reminderDraft, new Date());
   const [isSaving, setIsSaving] = useState(false);
-  const canSave = title.trim() !== "" && goal !== null && !isSaving;
+  const canSave = title.trim() !== "" && goal !== null && !reminderResult.error && !isSaving;
+
+  async function handleReminderToggle(enabled: boolean) {
+    if (enabled) {
+      let allowed = false;
+      try {
+        allowed = await ensureNotificationPermission();
+      } catch (error) {
+        console.error("Failed to check notification permission", error);
+      }
+      if (!allowed) {
+        Alert.alert(
+          "Notifications are off",
+          "To get reminders, allow notifications for this app in your phone's settings.",
+        );
+        return;
+      }
+    }
+    setReminderDraft({ ...reminderDraft, enabled });
+  }
 
   async function handleSave() {
     if (!canSave || !goal) return;
     setIsSaving(true);
     try {
-      await onSubmit({ title: title.trim(), color, icon, goal, current });
+      await onSubmit({ title: title.trim(), color, icon, goal, current, reminder: reminderResult.reminder });
     } catch (error) {
       console.error("Failed to save habit", error);
       Alert.alert("Couldn't save the habit", "Please try again.");
@@ -176,6 +200,16 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
         ) : null}
       </Section>
 
+      {goal?.type === "count" ? (
+        <Section title="Reminders" subtitle="Optional. Get a notification when it's time.">
+          <ToggleRow label="Remind me" value={reminderDraft.enabled} onChange={handleReminderToggle} />
+          {reminderDraft.enabled ? (
+            <ReminderFields frequency={goal.frequency} draft={reminderDraft} onChange={setReminderDraft} />
+          ) : null}
+          {reminderResult.error ? <Text style={styles.note}>{reminderResult.error}</Text> : null}
+        </Section>
+      ) : null}
+
       <Section title="Summary">
         <Text style={styles.summary}>
           <Text style={styles.summaryLabel}>Goal: </Text>
@@ -185,6 +219,12 @@ export function HabitForm({ initial, submitLabel, onSubmit }: HabitFormProps) {
           <Text style={styles.summary}>
             <Text style={styles.summaryLabel}>Current: </Text>
             {describeCurrent(current)}
+          </Text>
+        ) : null}
+        {reminderResult.reminder ? (
+          <Text style={styles.summary}>
+            <Text style={styles.summaryLabel}>Reminders: </Text>
+            {describeReminder(reminderResult.reminder)}
           </Text>
         ) : null}
       </Section>
